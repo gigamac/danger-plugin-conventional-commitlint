@@ -1,6 +1,12 @@
 // Provides dev-time type structures for  `danger` - doesn't affect runtime.
 import lint from '@commitlint/lint';
-import { LintOutcome } from '@commitlint/types';
+import load from '@commitlint/load';
+import {
+  LintOutcome,
+  ParserPreset,
+  ParserOptions,
+  LintOptions,
+} from '@commitlint/types';
 import { DangerDSLType } from '../node_modules/danger/distribution/dsl/DangerDSL';
 declare const danger: DangerDSLType;
 export declare function message(message: string): void;
@@ -28,6 +34,7 @@ interface Rules {
   'type-case': Array<number | string>;
   'type-empty': Array<number | string>;
   'type-enum': Array<string[] | number | string>;
+  [key: string]: Array<string[] | number | string>;
 }
 
 const messageReplacer = ({ ruleOutcome, commitMessage }) => {
@@ -53,6 +60,35 @@ export default async function commitlint(
 
   for (const commit of danger.git.commits) {
     await lintCommitMessage(commit.message, rules, config);
+  }
+}
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function localCommitLint(
+  userConfig?: CommitlintPluginConfig
+): Promise<void> {
+  const config = { ...defaultConfig, ...userConfig };
+  const loaded = await load();
+  const parserOpts = selectParserOpts(loaded.parserPreset);
+  const opts: LintOptions & { parserOpts: ParserOptions } = {
+    parserOpts: {},
+    plugins: {},
+    ignores: [],
+    defaultIgnores: true,
+  };
+  if (parserOpts) {
+    opts.parserOpts = parserOpts;
+  }
+  if (loaded.plugins) {
+    opts.plugins = loaded.plugins;
+  }
+  if (loaded.ignores) {
+    opts.ignores = loaded.ignores;
+  }
+  if (loaded.defaultIgnores === false) {
+    opts.defaultIgnores = false;
+  }
+  for (const commit of danger.git.commits) {
+    await lintCommitMessage(commit.message, loaded.rules, config);
   }
 }
 
@@ -83,4 +119,16 @@ async function lintCommitMessage(
       }
     }
   });
+}
+
+function selectParserOpts(parserPreset: ParserPreset | undefined) {
+  if (typeof parserPreset !== 'object') {
+    return undefined;
+  }
+
+  if (typeof parserPreset.parserOpts !== 'object') {
+    return undefined;
+  }
+
+  return parserPreset.parserOpts;
 }
